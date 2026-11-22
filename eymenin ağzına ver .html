@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Eymen'in Ağzına Ver</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 100vh;
+            max-height: 850px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+            background: linear-gradient(180deg, #bae6fd 0%, #e0f2fe 60%, #dcfce7 100%);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .hud-box {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 18px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        #score-display { color: #fde047; }
+        #lives-display { color: #f87171; letter-spacing: 2px; }
+        #combo-display {
+            position: absolute;
+            top: 65px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 22px;
+            font-weight: 900;
+            color: #f97316;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            pointer-events: none;
+        }
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(6px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+            z-index: 20;
+        }
+        .hidden { display: none !important; }
+        h1 {
+            font-size: 42px;
+            font-weight: 900;
+            color: #4ade80;
+            text-shadow: 0 4px 15px rgba(74, 222, 128, 0.4);
+            margin-bottom: 10px;
+            line-height: 1.1;
+        }
+        p {
+            font-size: 17px;
+            color: #cbd5e1;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        .btn {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 22px;
+            font-weight: 800;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(34, 197, 94, 0.5);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        .stats {
+            background: rgba(255,255,255,0.1);
+            padding: 15px 30px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            width: 80%;
+        }
+        .stats div {
+            font-size: 20px;
+            margin: 8px 0;
+            font-weight: 700;
+        }
+        .hint {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div id="ui-layer">
+        <div class="hud-box" id="score-display">SKOR: 0</div>
+        <div class="hud-box" id="lives-display">❤️❤️❤️</div>
+    </div>
+    <div id="combo-display">KOMBO x2!</div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="start-screen" class="overlay-screen">
+        <h1>EYMEN'İN<br>AĞZINA VER! 🥒</h1>
+        <p>Eymen acıkmış! Ağzını açtığı an <b>SPACE</b> tuşuna bas veya <b>EKRANA TIKLA</b>, koca salatalıkları tam ağzının ortasına gönder!</p>
+        <button class="btn" id="start-btn">OYUNA BAŞLA</button>
+        <div class="hint">İpucu: Ağzı kapalıyken atarsan canın gider!</div>
+    </div>
+
+    <div id="gameover-screen" class="overlay-screen hidden">
+        <h1 style="color: #f87171;">EYMEN DOYDU!</h1>
+        <div class="stats">
+            <div id="final-score" style="color: #fde047;">Skor: 0</div>
+            <div id="best-score" style="color: #4ade80;">En Yüksek: 0</div>
+        </div>
+        <button class="btn" id="restart-btn">TEKRAR OYNA</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('game-wrapper');
+
+    const scoreEl = document.getElementById('score-display');
+    const livesEl = document.getElementById('lives-display');
+    const comboEl = document.getElementById('combo-display');
+    const startScreen = document.getElementById('start-screen');
+    const gameoverScreen = document.getElementById('gameover-screen');
+    const finalScoreEl = document.getElementById('final-score');
+    const bestScoreEl = document.getElementById('best-score');
+
+    // Ses Efektleri (Web Audio API - harici dosya gerektirmez)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+
+        if (type === 'shoot') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, now);
+            osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        } else if (type === 'eat') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.setValueAtTime(450, now + 0.06);
+            osc.frequency.setValueAtTime(650, now + 0.12);
+            gain.gain.setValueAtTime(0.35, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+            osc.start(now);
+            osc.stop(now + 0.22);
+        } else if (type === 'miss') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(180, now);
+            osc.frequency.linearRampToValueAtTime(80, now + 0.25);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            osc.start(now);
+            osc.stop(now + 0.25);
+        }
+    }
+
+    let W, H;
+    function resize() {
+        W = wrapper.clientWidth;
+        H = wrapper.clientHeight;
+        canvas.width = W;
+        canvas.height = H;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Oyun Durumu
+    let gameState = 'START';
+    let score = 0;
+    let bestScore = localStorage.getItem('eymenBestScore') || 0;
+    let lives = 3;
+    let combo = 0;
+    let shakeTime = 0;
+
+    // Eymen Karakteri
+    const eymen = {
+        x: W / 2,
+        y: 175,
+        radius: 68,
+        vx: 2.8,
+        mouthOpen: 1, // 0 = kapalı, 1 = tam açık
+        mouthTimer: 0,
+        isMouthOpen: true,
+        chewTimer: 0,
+        hurtTimer: 0
+    };
+
+    let cucumbers = [];
+    let particles = [];
+    let floatingTexts = [];
+    let nextType = 'normal'; // 'normal' veya 'gold'
+
+    function pickNextCucumber() {
+        nextType = Math.random() < 0.2 ? 'gold' : 'normal';
+    }
+
+    function resetGame() {
+        score = 0;
+        lives = 3;
+        combo = 0;
+        cucumbers = [];
+        particles = [];
+        floatingTexts = [];
+        eymen.x = W / 2;
+        eymen.vx = 2.8;
+        eymen.mouthTimer = 0;
+        eymen.isMouthOpen = true;
+        eymen.mouthOpen = 1;
+        eymen.chewTimer = 0;
+        eymen.hurtTimer = 0;
+        pickNextCucumber();
+        updateHUD();
+    }
+
+    function updateHUD() {
+        scoreEl.textContent = `SKOR: ${score}`;
+        livesEl.textContent = '❤️'.repeat(Math.max(0, lives)) + '🖤'.repeat(Math.max(0, 3 - lives));
+        if (combo >= 2) {
+            comboEl.textContent = `KOMBO x${combo}!`;
+            comboEl.style.opacity = '1';
+            comboEl.style.transform = 'translateX(-50%) scale(1.1)';
+        } else {
+            comboEl.style.opacity = '0';
+            comboEl.style.transform = 'translateX(-50%) scale(0.9)';
+        }
+    }
+
+    function shootCucumber() {
+        if (gameState !== 'PLAYING') return;
+        playSound('shoot');
+        cucumbers.push({
+            x: W / 2,
+            y: H - 90,
+            vy: -19,
+            angle: 0,
+            vAngle: (Math.random() - 0.5) * 0.12,
+            scale: 1,
+            type: nextType
+        });
+        pickNextCucumber();
+    }
+
+    function spawnParticles(x, y, color, count = 16) {
+        for (let i = 0; i < count; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const spd = 2 + Math.random() * 6;
+            particles.push({
+                x, y,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd,
+                size: 4 + Math.random() * 6,
+                color,
+                life: 1
+            });
+        }
+    }
+
+    function addFloatingText(x, y, text, color) {
+        floatingTexts.push({ x, y, text, color, life: 1 });
+    }
+
+    // Salatalık Çizimi (Koca ve detaylı)
+    function drawCucumber(x, y, angle, scale, type) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.scale(scale, scale);
+
+        const w = 44;
+        const h = 135;
+
+        // Gölge
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(6, 6, w / 2, h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ana Gövde
+        const grad = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+        if (type === 'gold') {
+            grad.addColorStop(0, '#ca8a04');
+            grad.addColorStop(0.4, '#facc15');
+            grad.addColorStop(1, '#a16207');
+        } else {
+            grad.addColorStop(0, '#15803d');
+            grad.addColorStop(0.4, '#4ade80');
+            grad.addColorStop(1, '#14532d');
+        }
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dış Çizgi
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = type === 'gold' ? '#854d0e' : '#052e16';
+        ctx.stroke();
+
+        // Salatalık Pütürleri & Çizgileri
+        ctx.fillStyle = type === 'gold' ? '#fef08a' : '#86efac';
+        const bumps = [[-8, -35], [10, -20], [-10, 5], [9, 25], [-6, 42], [2, -48]];
+        bumps.forEach(([bx, by]) => {
+            ctx.beginPath();
+            ctx.arc(bx, by, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Sap kısmı
+        ctx.fillStyle = '#3f6212';
+        ctx.beginPath();
+        ctx.roundRect(-5, -h / 2 - 8, 10, 12, 4);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // Eymen Karakteri Çizimi
+    function drawEymen() {
+        ctx.save();
+        ctx.translate(eymen.x, eymen.y);
+
+        // Çiğneme veya hasar animasyonu esnemesi
+        let scaleX = 1;
+        let scaleY = 1;
+        if (eymen.chewTimer > 0) {
+            scaleX = 1 + Math.sin(eymen.chewTimer * 0.8) * 0.1;
+            scaleY = 1 - Math.sin(eymen.chewTimer * 0.8) * 0.1;
+        }
+        ctx.scale(scaleX, scaleY);
+
+        // Kulaklar
+        ctx.fillStyle = '#f1c27d';
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 3;
+        [-eymen.radius + 2, eymen.radius - 2].forEach(ex => {
+            ctx.beginPath();
+            ctx.arc(ex, 0, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+
+        // Kafa
+        ctx.fillStyle = eymen.hurtTimer > 0 ? '#fca5a5' : '#ffdbac';
+        ctx.beginPath();
+        ctx.arc(0, 0, eymen.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Saçlar (Havalı dikenli saç)
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.moveTo(-eymen.radius + 5, -20);
+        ctx.quadraticCurveTo(-50, -75, -25, -65);
+        ctx.lineTo(-10, -85);
+        ctx.lineTo(10, -68);
+        ctx.lineTo(28, -82);
+        ctx.lineTo(42, -62);
+        ctx.quadraticCurveTo(60, -65, eymen.radius - 5, -20);
+        ctx.quadraticCurveTo(0, -45, -eymen.radius + 5, -20);
+        ctx.fill();
+
+        // Gözler (En yakın salatalığı takip eder)
+        let targetX = W / 2;
+        let targetY = H - 100;
+        if (cucumbers.length > 0) {
+            targetX = cucumbers[0].x;
+            targetY = cucumbers[0].y;
+        }
+        const angleToTarget = Math.atan2(targetY - eymen.y, targetX - eymen.x);
+        const pupilOffsetX = Math.cos(angleToTarget) * 4;
+        const pupilOffsetY = Math.sin(angleToTarget) * 4;
+
+        [-24, 24].forEach(eyeX => {
+            // Göz akı
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(eyeX, -18, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#1e293b';
+            ctx.stroke();
+
+            // Göz bebeği
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(eyeX + pupilOffsetX, -18 + pupilOffsetY, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Parıltı
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(eyeX + pupilOffsetX - 2, -20 + pupilOffsetY, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Kaşlar
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-36, -34);
+        ctx.lineTo(-14, eymen.hurtTimer > 0 ? -28 : -36);
+        ctx.moveTo(36, -34);
+        ctx.lineTo(14, eymen.hurtTimer > 0 ? -28 : -36);
+        ctx.stroke();
+
+        // Ağız (Dinamik Açılıp Kapanma)
+        const mouthY = 24;
+        if (eymen.mouthOpen > 0.2) {
+            const mh = 34 * eymen.mouthOpen;
+            const mw = 36;
+            // Ağız içi
+            ctx.fillStyle = '#7f1d1d';
+            ctx.beginPath();
+            ctx.ellipse(0, mouthY, mw, mh, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#450a0a';
+            ctx.stroke();
+
+            // Dil
+            ctx.fillStyle = '#f43f5e';
+            ctx.beginPath();
+            ctx.ellipse(0, mouthY + mh * 0.45, mw * 0.55, mh * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Üst Dişler
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-14, mouthY - mh + 2, 28, 7 * eymen.mouthOpen);
+        } else {
+            // Kapalı Ağız (Çiğneme veya düz çizgi)
+            ctx.strokeStyle = '#450a0a';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(-26, mouthY);
+            ctx.quadraticCurveTo(0, mouthY + (eymen.chewTimer > 0 ? 8 : -2), 26, mouthY);
+            ctx.stroke();
+        }
+
+        // İsim Etiketi
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+        ctx.beginPath();
+        ctx.roundRect(-38, -eymen.radius - 32, 76, 22, 11);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('EYMEN', 0, -eymen.radius - 17);
+
+        ctx.restore();
+    }
+
+    function update() {
+        if (gameState !== 'PLAYING') return;
+
+        // Zorluk seviyesine göre hızlanma
+        const speedMultiplier = 1 + Math.min(score * 0.015, 1.8);
+
+        // Eymen yatay hareketi
+        eymen.x += eymen.vx * speedMultiplier;
+        const margin = eymen.radius + 20;
+        if (eymen.x > W - margin) {
+            eymen.x = W - margin;
+            eymen.vx = -Math.abs(eymen.vx);
+        } else if (eymen.x < margin) {
+            eymen.x = margin;
+            eymen.vx = Math.abs(eymen.vx);
+        }
+
+        // Eymen ağız açıp kapama döngüsü
+        if (eymen.chewTimer > 0) {
+            eymen.chewTimer--;
+            eymen.mouthOpen += (0 - eymen.mouthOpen) * 0.3;
+        } else {
+            eymen.mouthTimer++;
+            // Ağız açık kalma süresi kapalı kalma süresinden biraz daha uzun
+            const cycleLength = Math.max(95, 150 - score * 1.2);
+            const openThreshold = cycleLength * 0.62;
+            eymen.isMouthOpen = eymen.mouthTimer < openThreshold;
+            if (eymen.mouthTimer >= cycleLength) eymen.mouthTimer = 0;
+
+            const targetOpen = eymen.isMouthOpen ? 1 : 0;
+            eymen.mouthOpen += (targetOpen - eymen.mouthOpen) * 0.25;
+        }
+
+        if (eymen.hurtTimer > 0) eymen.hurtTimer--;
+        if (shakeTime > 0) shakeTime--;
+
+        // Salatalıkları güncelle
+        for (let i = cucumbers.length - 1; i >= 0; i--) {
+            const c = cucumbers[i];
+            c.y += c.vy;
+            c.angle += c.vAngle;
+
+            // Eymen'in ağzıyla çarpışma kontrolü
+            const mouthWorldY = eymen.y + 24;
+            const dx = c.x - eymen.x;
+            const dy = (c.y - 35) - mouthWorldY; // Salatalığın ucu
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < 52) {
+                if (eymen.mouthOpen > 0.55) {
+                    // BAŞARILI YEME!
+                    playSound('eat');
+                    combo++;
+                    const basePts = c.type === 'gold' ? 30 : 10;
+                    const earned = basePts + (combo > 1 ? combo * 2 : 0);
+                    score += earned;
+                    eymen.chewTimer = 18;
+                    spawnParticles(eymen.x, mouthWorldY, c.type === 'gold' ? '#facc15' : '#4ade80', 18);
+                    addFloatingText(eymen.x, mouthWorldY - 20, `+${earned} HAM!`, c.type === 'gold' ? '#fde047' : '#4ade80');
+                    cucumbers.splice(i, 1);
+                    updateHUD();
+                    continue;
+                } else {
+                    // AĞZI KAPALIYKEN VURDU!
+                    playSound('miss');
+                    lives--;
+                    combo = 0;
+                    eymen.hurtTimer = 20;
+                    shakeTime = 12;
+                    spawnParticles(c.x, c.y - 30, '#f87171', 14);
+                    addFloatingText(eymen.x, mouthWorldY - 20, 'AĞZI KAPALI!', '#f87171');
+                    cucumbers.splice(i, 1);
+                    updateHUD();
+                    if (lives <= 0) {
+                        endGame();
+                        return;
+                    }
+                    continue;
+                }
+            }
+
+            // Ekrandan dışarı çıkma (Iskalama)
+            if (c.y < -80) {
+                playSound('miss');
+                lives--;
+                combo = 0;
+                shakeTime = 10;
+                addFloatingText(c.x, 70, 'ISKADIN!', '#f87171');
+                cucumbers.splice(i, 1);
+                updateHUD();
+                if (lives <= 0) {
+                    endGame();
+                    return;
+                }
+            }
+        }
+
+        // Parçacıkları güncelle
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.2;
+            p.life -= 0.03;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        // Uçan yazıları güncelle
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            const ft = floatingTexts[i];
+            ft.y -= 1.5;
+            ft.life -= 0.025;
+            if (ft.life <= 0) floatingTexts.splice(i, 1);
+        }
+    }
+
+    function draw() {
+        ctx.save();
+        if (shakeTime > 0) {
+            const sx = (Math.random() - 0.5) * 12;
+            const sy = (Math.random() - 0.5) * 12;
+            ctx.translate(sx, sy);
+        }
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Arka Plan Bulutları
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(80, 120, 35, 0, Math.PI * 2);
+        ctx.arc(115, 120, 45, 0, Math.PI * 2);
+        ctx.arc(150, 125, 30, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(W - 110, 260, 30, 0, Math.PI * 2);
+        ctx.arc(W - 75, 260, 40, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eymen'i çiz
+        drawEymen();
+
+        // Uçan Salatalıkları çiz
+        cucumbers.forEach(c => {
+            drawCucumber(c.x, c.y, c.angle, c.scale, c.type);
+        });
+
+        // Fırlatma Rampasındaki Sıradaki Koca Salatalık
+        if (gameState === 'PLAYING') {
+            // Nişan çizgisi
+            ctx.strokeStyle = 'rgba(22, 163, 74, 0.25)';
+            ctx.setLineDash([8, 8]);
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(W / 2, H - 150);
+            ctx.lineTo(W / 2, eymen.y + 70);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            drawCucumber(W / 2, H - 70, 0, 1.05, nextType);
+        }
+
+        // Parçacıklar
+        particles.forEach(p => {
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        // Uçan Skor Yazıları
+        floatingTexts.forEach(ft => {
+            ctx.globalAlpha = Math.max(0, ft.life);
+            ctx.font = '900 24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 4;
+            ctx.strokeText(ft.text, ft.x, ft.y);
+            ctx.fillStyle = ft.color;
+            ctx.fillText(ft.text, ft.x, ft.y);
+        });
+        ctx.globalAlpha = 1;
+
+        ctx.restore();
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+        resetGame();
+        gameState = 'PLAYING';
+        startScreen.classList.add('hidden');
+        gameoverScreen.classList.add('hidden');
+    }
+
+    function endGame() {
+        gameState = 'GAMEOVER';
+        if (score > bestScore) {
+            bestScore = score;
+            localStorage.setItem('eymenBestScore', bestScore);
+        }
+        finalScoreEl.textContent = `Skor: ${score}`;
+        bestScoreEl.textContent = `En Yüksek: ${bestScore}`;
+        gameoverScreen.classList.remove('hidden');
+    }
+
+    // Kontroller
+    document.getElementById('start-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        startGame();
+    });
+
+    document.getElementById('restart-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        startGame();
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (gameState === 'PLAYING') {
+                shootCucumber();
+            } else if (gameState === 'START' || gameState === 'GAMEOVER') {
+                startGame();
+            }
+        }
+    });
+
+    wrapper.addEventListener('pointerdown', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        if (gameState === 'PLAYING') {
+            shootCucumber();
+        }
+    });
+
+    // Başlangıç döngüsü
+    loop();
+</script>
+
+</body>
+</html>
